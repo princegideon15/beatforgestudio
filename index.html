@@ -124,7 +124,7 @@ body.ready .w{animation:wIn .9s cubic-bezier(.2,.9,.2,1) both}@keyframes wIn{fro
 <div class="card hide" id="pno"><div class="packs" id="ins" style="margin-bottom:10px"></div><div class="kb" id="kb"></div></div>
 <div class="card" id="mic"><h3>Mic sampler</h3><div class="bar"><button class="btn rec" id="mrec" style="flex:1">🎙 Record sound</button><label class="btn" style="display:flex;align-items:center;gap:8px;cursor:pointer"><svg class="ic" viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4l4 4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>Import<input type="file" id="mfile" accept="audio/*" hidden></label></div><div class="lb" id="mst" style="margin-top:8px">Record up to 8 s, then drop it onto any pad and the sequencer.</div><div id="mnew" class="hide" style="margin-top:12px"><canvas id="mw" width="520" height="90" style="width:100%;height:45px;display:block;border-radius:10px;background:rgba(255,255,255,.06)"></canvas><div class="bar" style="margin-top:10px"><input id="mname" class="inp" placeholder="Sound name" maxlength="14"><select id="mpad" class="inp"></select></div><div class="bar" style="margin-top:10px"><button class="btn" id="mpre">▶ Preview</button><button class="btn go" id="madd" style="flex:1">Add to pad</button></div></div><div id="mlist" style="margin-top:8px"></div></div>
 <div class="card"><h3>Mixer &amp; FX</h3><div class="mx">
-<label><span class="lb">Volume</span><input type="range" id="vol" min="0" max="100" value="80"></label>
+<label><span class="lb">Volume</span><input type="range" id="vol" min="0" max="200" value="100"></label>
 <label><span class="lb">Tempo</span><input type="range" id="bpm" min="60" max="200" value="140"></label>
 <label><span class="lb">EQ Low</span><input type="range" id="lo" min="-12" max="12" value="0"></label>
 <label><span class="lb">EQ Mid</span><input type="range" id="mi" min="-12" max="12" value="0"></label>
@@ -140,15 +140,15 @@ function init(){if(ctx){ctx.state!=='running'&&ctx.resume();return}
 try{navigator.audioSession.type='playback'}catch(e){}ctx=new(window.AudioContext||window.webkitAudioContext)();bus=ctx.createGain();
 const f=(t,fr,q)=>{const b=ctx.createBiquadFilter();b.type=t;b.frequency.value=fr;if(q)b.Q.value=q;return b};
 eq.l=f('lowshelf',150);eq.m=f('peaking',1200,1);eq.h=f('highshelf',6000);
-const comp=ctx.createDynamicsCompressor();vol=ctx.createGain();vol.gain.value=.8;
-bus.connect(eq.l);eq.l.connect(eq.m);eq.m.connect(eq.h);eq.h.connect(comp);comp.connect(vol);
+const comp=ctx.createDynamicsCompressor(),mk=ctx.createGain(),lim=ctx.createDynamicsCompressor();comp.threshold.value=-20;comp.knee.value=10;comp.ratio.value=6;comp.attack.value=.004;comp.release.value=.2;mk.gain.value=2.8;lim.threshold.value=-2;lim.knee.value=0;lim.ratio.value=20;lim.attack.value=.001;lim.release.value=.1;vol=ctx.createGain();vol.gain.value=1;
+bus.connect(eq.l);eq.l.connect(eq.m);eq.m.connect(eq.h);eq.h.connect(comp);comp.connect(mk);mk.connect(vol);
 fxIn=ctx.createGain();dly=ctx.createDelay(1);const fb=ctx.createGain();fb.gain.value=.4;dg=ctx.createGain();dg.gain.value=0;
 fxIn.connect(dly);dly.connect(fb);fb.connect(dly);dly.connect(dg);dg.connect(comp);
 const rv=ctx.createConvolver(),L=ctx.sampleRate*1.8,ib=ctx.createBuffer(2,L,ctx.sampleRate);
 for(let c=0;c<2;c++){const d=ib.getChannelData(c);for(let i=0;i<L;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/L,3)}
 rv.buffer=ib;rg=ctx.createGain();rg.gain.value=0;fxIn.connect(rv);rv.connect(rg);rg.connect(comp);
 an=ctx.createAnalyser();an.fftSize=256;rd=ctx.createMediaStreamDestination();
-vol.connect(ctx.destination);vol.connect(an);vol.connect(rd);
+vol.connect(lim);lim.connect(ctx.destination);lim.connect(an);lim.connect(rd);
 ['vol','lo','mi','hi','rev','ech'].forEach(i=>$('#'+i).dispatchEvent(new Event('input')));setDly();meter()}
 const setDly=()=>dly&&(dly.delayTime.value=60/bpm*.75);
 function meter(){const d=new Uint8Array(an.fftSize);(function l(){an.getByteTimeDomainData(d);let m=0;for(const v of d)m=Math.max(m,Math.abs(v-128));$('#mt').style.width=Math.min(100,m/90*100)+'%';requestAnimationFrame(l)})()}
@@ -158,13 +158,13 @@ function G(t,v,d,a=.003){const g=ctx.createGain();g.gain.setValueAtTime(0,t);g.g
 function O(type,f,t,d,dest){const o=ctx.createOscillator();o.type=type;o.frequency.setValueAtTime(f,t);o.connect(dest);o.start(t);o.stop(t+d+.05);return o}
 function Nz(t,d,dest,type,f,q=1){const s=ctx.createBufferSource();s.buffer=N();const fl=ctx.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;s.connect(fl);fl.connect(dest);s.start(t,Math.random());s.stop(t+d+.05);return fl}
 const LP=(dest,f,q=1)=>{const fl=ctx.createBiquadFilter();fl.type='lowpass';fl.frequency.value=f;fl.Q.value=q;fl.connect(dest);return fl};
-const kick=(t,p)=>{const g=G(t,1,p.d);O('sine',p.f,t,p.d,g).frequency.exponentialRampToValueAtTime(p.e,t+.09);Nz(t,.01,G(t,.3,.02),'highpass',3000)};
+const kick=(t,p)=>{const g=G(t,1,p.d);O('sine',p.f,t,p.d,g).frequency.exponentialRampToValueAtTime(p.e,t+.09);Nz(t,.012,G(t,.6,.03),'highpass',2500)};
 const snare=(t,p)=>{Nz(t,.2,G(t,.7,.2),'highpass',p.h);O('triangle',p.t,t,.12,G(t,.5,.12))};
 const clap=t=>{for(let i=0;i<3;i++)Nz(t+i*.012,.12,G(t+i*.012,.55,.13),'bandpass',1500,1.2)};
 const hat=(t,d)=>Nz(t,d,G(t,.32,d),'highpass',7500);
 const rim=t=>{O('square',820,t,.06,G(t,.25,.06));Nz(t,.05,G(t,.2,.05),'highpass',4000)};
 function bass(t,f,p){const b=p.b,d={wob:.9,house:.28,lofi:.5,reese:.7,sub:1.1}[b],g=G(t,.85,d,.006);
-if(b=='sub'||b=='lofi'){O('sine',f,t,d,g);O('triangle',f*2,t,d,G(t,.15,d))}
+if(b=='sub'||b=='lofi'){O('sine',f,t,d,g);O('triangle',f*2,t,d,G(t,.4,d));O('sine',f*3,t,d*.7,G(t,.2,d*.7))}
 else{const fl=LP(g,b=='reese'?500:b=='wob'?900:1800,b=='wob'?9:3);
 if(b=='house'){fl.frequency.setValueAtTime(1800,t);fl.frequency.exponentialRampToValueAtTime(200,t+.2)}
 O('sawtooth',f,t,d,fl).detune.value=-12;O('sawtooth',f,t,d,fl).detune.value=12;
